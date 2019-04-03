@@ -15,7 +15,8 @@ The basic workflow is as follows:
 import logging
 from typing import List
 
-from fastai.basics import *
+from fastai.vision import *
+from fastai.metrics import error_rate
 from google_images_download import google_images_download
 
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +27,13 @@ ANTELOPE = ['kudu', 'eland', 'sable antelope', 'roan antelope', 'waterbuck',
             'lichtensteins hartebeest', 'grey duiker', 'steenbok',
             'klipspringer']
 
-def download_images(output_path: Path, limit: int) -> None:
+DATA_PATH = Path('data')
+VALID_PCT = 0.2
+IMAGE_SIZE = 224
+BATCH_SIZE = 32
+ARCHITECTURE = models.resnet34
+
+def download_antelope_images(output_path: Path, limit: int = 50) -> None:
     """Download images for each of the antelope to the output path.
     
     Each species is put in a separate sub-directory under output_path.
@@ -56,5 +63,23 @@ def download_images(output_path: Path, limit: int) -> None:
             response.download(arguments)
 
 
+def train_model(data_path: Path, valid_pct, image_size, batch_size, architecture) -> Learner:
+    """Train a deep convolutional NN classifier on the downloaded data.
+    """
+    image_data = ImageDataBunch.from_folder(data_path, valid_pct=valid_pct,\
+                                            ds_tfms=get_transforms(), size=image_size,
+                                            bs=batch_size).normalize(imagenet_stats)
+
+    learner = cnn_learner(image_data, architecture, metrics=error_rate)
+    learner.fit_one_cycle(4, max_lr=slice(1e-3, 1e-2))
+    learner.unfreeze()
+    learner.fit_one_cycle(4, max_lr=slice(1e-6, 1e-4))
+    return learner
+
 if __name__ == '__main__':
-    download_images(Path('data'), 50)
+    download_antelope_images(DATA_PATH)
+    
+    learner = train_model(DATA_PATH, VALID_PCT, IMAGE_SIZE, BATCH_SIZE, ARCHITECTURE)
+
+    print(f'Error rate: {learner.recorder.metrics[-1]}')
+    
