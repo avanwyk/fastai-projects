@@ -9,7 +9,7 @@ The basic workflow is as follows:
 2. Pre-process and prepare the dataset for learning.
 3. Create a deep neural network model for classification.
 4. Train the DNN using transfer learning on the data.
-5. Validate and evaluate the model.
+5. Output error rate.
 
 """
 import logging
@@ -62,9 +62,30 @@ def download_antelope_images(output_path: Path, limit: int = 50) -> None:
             }
             response.download(arguments)
 
+def validate_labels(data_path: Path, labels: List[str]) -> None:
+    """Validate the file names of each of the labeled images.
+
+    If a file name contains the label of another class, the path is logged. 
+    """
+    non_alpha = re.compile('([^a-zA-Z]+|antelope)')
+
+    filtered_labels = [non_alpha.sub('', label) for label in labels]
+
+    for path in data_path.ls():
+        if path.is_dir():
+            label = non_alpha.sub('', path.name)
+            other_labels = [other for other in filtered_labels if other != label]
+            for subpath in path.ls():
+                if subpath.is_file():
+                    file_name = non_alpha.sub('', subpath.name)
+                    for other_label in other_labels:
+                        if other_label in file_name:
+                            logging.info(f'Potential mislabeling: {subpath}')
 
 def train_model(data_path: Path, valid_pct, image_size, batch_size, architecture) -> Learner:
     """Train a deep convolutional NN classifier on the downloaded data.
+
+    Learning rates were found using learn.lr_find() in accompanying Jupyter notebook.
     """
     image_data = ImageDataBunch.from_folder(data_path, valid_pct=valid_pct,\
                                             ds_tfms=get_transforms(), size=image_size,
@@ -73,7 +94,7 @@ def train_model(data_path: Path, valid_pct, image_size, batch_size, architecture
     learner = cnn_learner(image_data, architecture, metrics=error_rate)
     learner.fit_one_cycle(4, max_lr=slice(1e-3, 1e-2))
     learner.unfreeze()
-    learner.fit_one_cycle(4, max_lr=slice(1e-6, 1e-4))
+    learner.fit_one_cycle(4, 1e-4)
     return learner
 
 if __name__ == '__main__':
