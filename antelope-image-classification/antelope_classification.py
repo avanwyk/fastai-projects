@@ -33,7 +33,7 @@ IMAGE_SIZE = 224
 BATCH_SIZE = 32
 ARCHITECTURE = models.resnet34
 
-def download_antelope_images(output_path: Path, limit: int = 50) -> None:
+def download_antelope_images(output_path: Path, limit: int = 50, kws = []) -> None:
     """Download images for each of the antelope to the output path.
     
     Each species is put in a separate sub-directory under output_path.
@@ -53,9 +53,9 @@ def download_antelope_images(output_path: Path, limit: int = 50) -> None:
             output_directory = str(output_path/antelope).replace(' ', '_')
 
             arguments = {
-                'keywords': f'wild {antelope} {gender} -hunting -stock',
+                'keywords': f'wild {antelope} {gender} {" ".join(kws)} -hunting -stock',
                 'output_directory': output_directory,
-                'usage_rights': 'labeled-for-nocommercial-reuse',
+                #'usage_rights': 'labeled-for-nocommercial-reuse',
                 'no_directory': True,
                 'size': 'medium',
                 'limit': limit
@@ -71,16 +71,16 @@ def validate_labels(data_path: Path, labels: List[str]) -> None:
 
     filtered_labels = [non_alpha.sub('', label) for label in labels]
 
-    for path in data_path.ls():
-        if path.is_dir():
-            label = non_alpha.sub('', path.name)
-            other_labels = [other for other in filtered_labels if other != label]
-            for subpath in path.ls():
-                if subpath.is_file():
-                    file_name = non_alpha.sub('', subpath.name)
-                    for other_label in other_labels:
-                        if other_label in file_name:
-                            logging.info(f'Potential mislabeling: {subpath}')
+    for path in [d for d in data_path.ls() if d.is_dir()]:
+        label = non_alpha.sub('', path.name)
+        other_labels = [other for other in filtered_labels if other != label]
+
+        file_names = [non_alpha.sub('', f.name) for f in path.ls() if f.is_file()]
+        for name in file_names:
+            for other_label in other_labels:
+                if other_label in name:
+                    logging.info(f'Potential mislabeling: {path}/{name}')
+                    
 
 def train_model(data_path: Path, valid_pct, image_size, batch_size, architecture) -> Learner:
     """Train a deep convolutional NN classifier on the downloaded data.
